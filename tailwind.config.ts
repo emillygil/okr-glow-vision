@@ -12,8 +12,17 @@ export default {
         "2xl": "1400px",
       },
     },
+    fontFamily: {
+      sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+    },
     extend: {
       colors: {
+        brand: {
+          deep: "hsl(var(--brand-deep))",
+          teal: "hsl(var(--brand-teal))",
+          lime: "hsl(var(--brand-lime))",
+          ice: "hsl(var(--brand-ice))",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
