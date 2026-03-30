@@ -1,4 +1,4 @@
-import Dashboard from "./pages/Dashboard";
+import Dashboard from "./Dashboard";
 
 const Index = () => <Dashboard />;
 export default Index;

@@ -139,7 +139,7 @@ export default function Dashboard() {
                 key={team}
                 onClick={() => {
                   setSelectedTeam(team);
-                  if (filterType === "estrategico") setFilterType("tatico");
+                  if (filterType !== "tatico") setFilterType("tatico");
                 }}
                 className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                   selectedTeam === team
