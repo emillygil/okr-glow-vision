@@ -1,227 +1,275 @@
 import { useState, useMemo } from "react";
-import { okrData, tacticalTeams, OKRType } from "@/data/okrData";
-import { ObjectiveCard } from "@/components/ObjectiveCard";
-import { Target, BarChart3, Users, Filter } from "lucide-react";
-
-type FilterType = "todos" | "estrategico" | "tatico";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Target, BarChart3, Users, Filter, History } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export default function Dashboard() {
-  const [filterType, setFilterType] = useState<FilterType>("todos");
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
+  const [filterType, setFilterType] = useState<"todos" | "estrategico" | "tatico">("todos");
   const [selectedTeam, setSelectedTeam] = useState<string>("Todas");
+  const [historyKrId, setHistoryKrId] = useState<string | null>(null);
+  const [historyKrTitle, setHistoryKrTitle] = useState("");
 
-  const filteredGroups = useMemo(() => {
-    return okrData.filter((group) => {
-      if (filterType === "estrategico" && group.type !== "estrategico") return false;
-      if (filterType === "tatico" && group.type !== "tatico") return false;
-      if (selectedTeam !== "Todas" && group.team !== selectedTeam) return false;
+  const { data: periods = [] } = useQuery({
+    queryKey: ["periods"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("periods").select("*").order("year", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Auto-select first period
+  const effectivePeriodId = selectedPeriodId || periods[0]?.id || "";
+
+  const { data: teams = [] } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("teams").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: objectives = [] } = useQuery({
+    queryKey: ["dashboard-objectives", effectivePeriodId],
+    queryFn: async () => {
+      if (!effectivePeriodId) return [];
+      const { data, error } = await supabase
+        .from("objectives")
+        .select("*, key_results(*, teams(name))")
+        .eq("period_id", effectivePeriodId)
+        .order("created_at");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!effectivePeriodId,
+  });
+
+  const { data: history = [] } = useQuery({
+    queryKey: ["kr-history", historyKrId],
+    queryFn: async () => {
+      if (!historyKrId) return [];
+      const { data, error } = await supabase
+        .from("kr_history")
+        .select("*, profiles:created_by(full_name)")
+        .eq("key_result_id", historyKrId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!historyKrId,
+  });
+
+  const filteredObjectives = useMemo(() => {
+    return objectives.filter((o) => {
+      if (filterType === "estrategico" && o.type !== "estrategico") return false;
+      if (filterType === "tatico" && o.type !== "tatico") return false;
       return true;
-    });
-  }, [filterType, selectedTeam]);
-
-  const totalKRs = useMemo(
-    () =>
-      filteredGroups.reduce(
-        (sum, g) => sum + g.objectives.reduce((s, o) => s + o.keyResults.length, 0),
-        0
+    }).map((o) => ({
+      ...o,
+      key_results: (o.key_results || []).filter((kr: any) =>
+        selectedTeam === "Todas" || (kr.teams?.name === selectedTeam)
       ),
-    [filteredGroups]
-  );
+    })).filter((o) => o.key_results.length > 0);
+  }, [objectives, filterType, selectedTeam]);
 
-  const avgProgress = useMemo(() => {
-    let total = 0;
-    let count = 0;
-    filteredGroups.forEach((g) =>
-      g.objectives.forEach((o) =>
-        o.keyResults.forEach((kr) => {
-          total += kr.progress;
-          count++;
-        })
-      )
-    );
-    return count > 0 ? Math.round(total / count) : 0;
-  }, [filteredGroups]);
+  const allKRs = filteredObjectives.flatMap((o) => o.key_results);
+  const totalKRs = allKRs.length;
+  const avgProgress = totalKRs > 0
+    ? Math.round(allKRs.reduce((sum, kr: any) => {
+        const progress = kr.target_value > 0 ? (kr.current_value / kr.target_value) * 100 : 0;
+        return sum + Math.min(progress, 100);
+      }, 0) / totalKRs)
+    : 0;
+  const completedKRs = allKRs.filter((kr: any) => kr.current_value >= kr.target_value).length;
 
-  const completedKRs = useMemo(
-    () =>
-      filteredGroups.reduce(
-        (sum, g) =>
-          sum +
-          g.objectives.reduce(
-            (s, o) => s + o.keyResults.filter((kr) => kr.progress >= 100).length,
-            0
-          ),
-        0
-      ),
-    [filteredGroups]
-  );
-
-  const typeButtons: { key: FilterType; label: string; icon: React.ReactNode }[] = [
-    { key: "todos", label: "Todos", icon: <BarChart3 className="h-4 w-4" /> },
-    { key: "estrategico", label: "Estratégicos", icon: <Target className="h-4 w-4" /> },
-    { key: "tatico", label: "Táticos", icon: <Users className="h-4 w-4" /> },
+  const typeButtons = [
+    { key: "todos" as const, label: "Todos", icon: <BarChart3 className="h-4 w-4" /> },
+    { key: "estrategico" as const, label: "Estratégicos", icon: <Target className="h-4 w-4" /> },
+    { key: "tatico" as const, label: "Táticos", icon: <Users className="h-4 w-4" /> },
   ];
 
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-primary text-primary-foreground">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-tight">
-                OKRs 2026
-              </h1>
-              <p className="text-primary-foreground/70 text-sm mt-1">
-                JA Rio de Janeiro — Acompanhamento de Resultados
-              </p>
-            </div>
-            <div className="hidden sm:flex items-center gap-1 bg-primary-foreground/10 rounded-lg p-1">
-              {typeButtons.map((btn) => (
-                <button
-                  key={btn.key}
-                  onClick={() => {
-                    setFilterType(btn.key);
-                    if (btn.key === "estrategico") setSelectedTeam("Todas");
-                  }}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                    filterType === btn.key
-                      ? "bg-primary-foreground text-primary shadow-sm"
-                      : "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10"
-                  }`}
-                >
-                  {btn.icon}
-                  {btn.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </header>
+  const getProgressColor = (progress: number) => {
+    if (progress >= 75) return "hsl(var(--secondary))";
+    if (progress >= 25) return "hsl(var(--accent))";
+    return "hsl(var(--muted-foreground))";
+  };
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Mobile type filter */}
-        <div className="flex sm:hidden items-center gap-1 bg-muted rounded-lg p-1 mb-4">
+  return (
+    <div>
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <Select value={effectivePeriodId} onValueChange={setSelectedPeriodId}>
+          <SelectTrigger className="w-32"><SelectValue placeholder="Ano" /></SelectTrigger>
+          <SelectContent>
+            {periods.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.year} {p.is_open ? "🟢" : "🔴"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
           {typeButtons.map((btn) => (
             <button
               key={btn.key}
-              onClick={() => {
-                setFilterType(btn.key);
-                if (btn.key === "estrategico") setSelectedTeam("Todas");
-              }}
-              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all ${
+              onClick={() => { setFilterType(btn.key); if (btn.key === "estrategico") setSelectedTeam("Todas"); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                 filterType === btn.key
                   ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {btn.icon}
-              {btn.label}
+              {btn.icon}{btn.label}
             </button>
           ))}
         </div>
 
-        {/* Team filter (only when not purely strategic) */}
         {filterType !== "estrategico" && (
-          <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
             <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
             <button
               onClick={() => setSelectedTeam("Todas")}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                selectedTeam === "Todas"
-                  ? "bg-secondary text-secondary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium ${
+                selectedTeam === "Todas" ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground"
               }`}
-            >
-              Todas as equipes
-            </button>
-            {tacticalTeams.map((team) => (
+            >Todas</button>
+            {teams.map((t) => (
               <button
-                key={team}
-                onClick={() => {
-                  setSelectedTeam(team);
-                  if (filterType !== "tatico") setFilterType("tatico");
-                }}
-                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  selectedTeam === team
-                    ? "bg-secondary text-secondary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                key={t.id}
+                onClick={() => { setSelectedTeam(t.name); if (filterType !== "tatico") setFilterType("tatico"); }}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium ${
+                  selectedTeam === t.name ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground"
                 }`}
-              >
-                {team}
-              </button>
+              >{t.name}</button>
             ))}
           </div>
         )}
+      </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {[
-            { label: "Total de KRs", value: totalKRs, accent: false },
-            { label: "Progresso Médio", value: `${avgProgress}%`, accent: true },
-            { label: "KRs Concluídos", value: completedKRs, accent: false },
-            { label: "Equipes", value: filteredGroups.length, accent: false },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className="glass-card rounded-xl p-4 text-center"
-            >
-              <p className="text-xs text-muted-foreground font-medium">
-                {stat.label}
-              </p>
-              <p
-                className={`text-2xl font-extrabold mt-1 ${
-                  stat.accent ? "text-secondary" : "text-foreground"
-                }`}
-              >
-                {stat.value}
-              </p>
-            </div>
-          ))}
-        </div>
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        {[
+          { label: "Total de KRs", value: totalKRs, accent: false },
+          { label: "Progresso Médio", value: `${avgProgress}%`, accent: true },
+          { label: "KRs Concluídos", value: completedKRs, accent: false },
+          { label: "Objetivos", value: filteredObjectives.length, accent: false },
+        ].map((stat) => (
+          <div key={stat.label} className="glass-card rounded-xl p-4 text-center">
+            <p className="text-xs text-muted-foreground font-medium">{stat.label}</p>
+            <p className={`text-2xl font-extrabold mt-1 ${stat.accent ? "text-secondary" : "text-foreground"}`}>
+              {stat.value}
+            </p>
+          </div>
+        ))}
+      </div>
 
-        {/* OKR Groups */}
-        <div className="space-y-8">
-          {filteredGroups.map((group) => (
-            <section key={`${group.type}-${group.team}`}>
-              <div className="flex items-center gap-3 mb-4">
-                <div
-                  className={`h-8 w-1 rounded-full ${
-                    group.type === "estrategico" ? "bg-primary" : "bg-secondary"
-                  }`}
-                />
-                <div>
-                  <h2 className="text-lg font-bold text-foreground">
-                    {group.team}
-                  </h2>
-                  <span
-                    className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      group.type === "estrategico"
-                        ? "bg-primary/10 text-primary"
-                        : "bg-secondary/10 text-secondary"
-                    }`}
-                  >
-                    {group.type === "estrategico" ? "Estratégico" : "Tático"}
-                  </span>
+      {/* Objectives + KRs */}
+      <div className="space-y-6">
+        {filteredObjectives.map((obj) => {
+          const objKRs = obj.key_results as any[];
+          const objProgress = objKRs.length > 0
+            ? Math.round(objKRs.reduce((s, kr) => s + Math.min((kr.current_value / kr.target_value) * 100, 100), 0) / objKRs.length)
+            : 0;
+
+          return (
+            <div key={obj.id} className="glass-card rounded-xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <Target className="h-5 w-5 text-primary shrink-0" />
+                  <div>
+                    <h3 className="font-bold text-foreground text-sm">{obj.title}</h3>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                      obj.type === "estrategico" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"
+                    }`}>
+                      {obj.type === "estrategico" ? "Estratégico" : "Tático"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 bg-muted rounded-full px-3 py-1">
+                  <div className="h-2 w-2 rounded-full" style={{ backgroundColor: getProgressColor(objProgress) }} />
+                  <span className="text-xs font-bold text-foreground">{objProgress}%</span>
                 </div>
               </div>
-              <div className="grid gap-4 lg:grid-cols-2">
-                {group.objectives
-                  .filter((o) => o.keyResults.length > 0)
-                  .map((obj) => (
-                    <ObjectiveCard key={`${group.team}-${obj.id}`} objective={obj} />
-                  ))}
-              </div>
-            </section>
-          ))}
-        </div>
 
-        {/* Footer */}
-        <footer className="mt-12 pb-8 text-center">
-          <p className="text-xs text-muted-foreground">
-            JA Rio de Janeiro © 2026 — Dashboard de OKRs
-          </p>
-        </footer>
+              <div className="space-y-2">
+                {objKRs.map((kr: any) => {
+                  const progress = kr.target_value > 0 ? Math.min((kr.current_value / kr.target_value) * 100, 100) : 0;
+                  return (
+                    <div
+                      key={kr.id}
+                      className="bg-muted/50 rounded-lg p-3 cursor-pointer hover:bg-muted/80 transition-colors"
+                      onClick={() => { setHistoryKrId(kr.id); setHistoryKrTitle(kr.title); }}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-medium text-foreground">{kr.title}</p>
+                          <History className="h-3 w-3 text-muted-foreground" />
+                        </div>
+                        <span className="text-xs text-muted-foreground">{kr.teams?.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 rounded-full bg-border overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${progress}%`, backgroundColor: getProgressColor(progress) }}
+                          />
+                        </div>
+                        <span className="text-xs font-bold text-foreground min-w-[80px] text-right">
+                          {kr.current_value}{kr.unit_type === "percentage" ? "%" : ""} / {kr.target_value}{kr.unit_type === "percentage" ? "%" : ""}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+      {filteredObjectives.length === 0 && effectivePeriodId && (
+        <p className="text-center text-muted-foreground py-12">Nenhum resultado encontrado para os filtros selecionados.</p>
+      )}
+
+      {/* History Dialog */}
+      <Dialog open={!!historyKrId} onOpenChange={() => setHistoryKrId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-sm">Histórico: {historyKrTitle}</DialogTitle>
+          </DialogHeader>
+          {history.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">Nenhuma movimentação registrada.</p>
+          ) : (
+            <div className="space-y-3 max-h-80 overflow-y-auto">
+              {history.map((h: any) => (
+                <div key={h.id} className="border-l-2 border-secondary pl-3 py-1">
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(h.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                    {h.profiles?.full_name && ` — ${h.profiles.full_name}`}
+                  </p>
+                  <p className="text-sm font-medium text-foreground">
+                    {h.previous_value} → {h.new_value}
+                  </p>
+                  {h.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{h.description}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <footer className="mt-12 pb-8 text-center">
+        <p className="text-xs text-muted-foreground">JA Rio de Janeiro © {new Date().getFullYear()} — Dashboard de OKRs</p>
+      </footer>
     </div>
   );
 }
