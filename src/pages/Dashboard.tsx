@@ -23,7 +23,6 @@ export default function Dashboard() {
     },
   });
 
-  // Auto-select first period
   const effectivePeriodId = selectedPeriodId || periods[0]?.id || "";
 
   const { data: teams = [] } = useQuery({
@@ -41,7 +40,7 @@ export default function Dashboard() {
       if (!effectivePeriodId) return [];
       const { data, error } = await supabase
         .from("objectives")
-        .select("*, key_results(*, teams(name))")
+        .select("*, key_results(*, teams(name)), teams(name)")
         .eq("period_id", effectivePeriodId)
         .order("created_at");
       if (error) throw error;
@@ -56,7 +55,7 @@ export default function Dashboard() {
       if (!historyKrId) return [];
       const { data, error } = await supabase
         .from("kr_history")
-        .select("*, profiles:created_by(full_name)")
+        .select("*")
         .eq("key_result_id", historyKrId)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -75,7 +74,7 @@ export default function Dashboard() {
       key_results: (o.key_results || []).filter((kr: any) =>
         selectedTeam === "Todas" || (kr.teams?.name === selectedTeam)
       ),
-    })).filter((o) => o.key_results.length > 0);
+    })).filter((o) => filterType === "estrategico" ? true : o.key_results.length > 0);
   }, [objectives, filterType, selectedTeam]);
 
   const allKRs = filteredObjectives.flatMap((o) => o.key_results);
@@ -98,6 +97,11 @@ export default function Dashboard() {
     if (progress >= 75) return "hsl(var(--secondary))";
     if (progress >= 25) return "hsl(var(--accent))";
     return "hsl(var(--muted-foreground))";
+  };
+
+  const formatBrazilianDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return format(date, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   };
 
   return (
@@ -185,11 +189,16 @@ export default function Dashboard() {
                   <Target className="h-5 w-5 text-primary shrink-0" />
                   <div>
                     <h3 className="font-bold text-foreground text-sm">{obj.title}</h3>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      obj.type === "estrategico" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"
-                    }`}>
-                      {obj.type === "estrategico" ? "Estratégico" : "Tático"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        obj.type === "estrategico" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"
+                      }`}>
+                        {obj.type === "estrategico" ? "Estratégico" : "Tático"}
+                      </span>
+                      {(obj as any).teams?.name && (
+                        <span className="text-xs text-muted-foreground">{(obj as any).teams.name}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 bg-muted rounded-full px-3 py-1">
@@ -212,7 +221,7 @@ export default function Dashboard() {
                           <p className="text-xs font-medium text-foreground">{kr.title}</p>
                           <History className="h-3 w-3 text-muted-foreground" />
                         </div>
-                        <span className="text-xs text-muted-foreground">{kr.teams?.name}</span>
+                        <span className="text-xs text-muted-foreground">{kr.teams?.name ?? "Global"}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="flex-1 h-2 rounded-full bg-border overflow-hidden">
@@ -228,6 +237,9 @@ export default function Dashboard() {
                     </div>
                   );
                 })}
+                {objKRs.length === 0 && (
+                  <p className="text-xs text-muted-foreground py-2">Nenhum resultado-chave cadastrado.</p>
+                )}
               </div>
             </div>
           );
@@ -240,7 +252,7 @@ export default function Dashboard() {
 
       {/* History Dialog */}
       <Dialog open={!!historyKrId} onOpenChange={() => setHistoryKrId(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-sm">Histórico: {historyKrTitle}</DialogTitle>
           </DialogHeader>
@@ -251,15 +263,11 @@ export default function Dashboard() {
               {history.map((h: any) => (
                 <div key={h.id} className="border-l-2 border-secondary pl-3 py-1">
                   <p className="text-xs text-muted-foreground">
-                    {format(new Date(h.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                    {h.profiles?.full_name && ` — ${h.profiles.full_name}`}
+                    {formatBrazilianDate(h.created_at)}
+                    {h.month && ` · Ref: ${h.month}`}
                   </p>
-                  <p className="text-sm font-medium text-foreground">
-                    {h.previous_value} → {h.new_value}
-                  </p>
-                  {h.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{h.description}</p>
-                  )}
+                  <p className="text-sm font-medium text-foreground">{h.description}</p>
+                  <p className="text-xs text-muted-foreground">{h.previous_value} → {h.new_value}</p>
                 </div>
               ))}
             </div>

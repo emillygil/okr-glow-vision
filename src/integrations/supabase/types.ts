@@ -16,39 +16,54 @@ export type Database = {
     Tables: {
       key_results: {
         Row: {
+          base_value: number | null
           created_at: string
           created_by: string | null
           current_value: number
+          data_source: string | null
           id: string
+          measurement_method: string | null
           objective_id: string
+          parent_kr_id: string | null
           target_value: number
           team_id: string | null
           title: string
           unit_type: Database["public"]["Enums"]["unit_type"]
+          update_frequency: string | null
           updated_at: string
         }
         Insert: {
+          base_value?: number | null
           created_at?: string
           created_by?: string | null
           current_value?: number
+          data_source?: string | null
           id?: string
+          measurement_method?: string | null
           objective_id: string
+          parent_kr_id?: string | null
           target_value?: number
           team_id?: string | null
           title: string
           unit_type?: Database["public"]["Enums"]["unit_type"]
+          update_frequency?: string | null
           updated_at?: string
         }
         Update: {
+          base_value?: number | null
           created_at?: string
           created_by?: string | null
           current_value?: number
+          data_source?: string | null
           id?: string
+          measurement_method?: string | null
           objective_id?: string
+          parent_kr_id?: string | null
           target_value?: number
           team_id?: string | null
           title?: string
           unit_type?: Database["public"]["Enums"]["unit_type"]
+          update_frequency?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -57,6 +72,13 @@ export type Database = {
             columns: ["objective_id"]
             isOneToOne: false
             referencedRelation: "objectives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "key_results_parent_kr_id_fkey"
+            columns: ["parent_kr_id"]
+            isOneToOne: false
+            referencedRelation: "key_results"
             referencedColumns: ["id"]
           },
           {
@@ -75,6 +97,7 @@ export type Database = {
           description: string | null
           id: string
           key_result_id: string
+          month: string | null
           new_value: number
           previous_value: number
         }
@@ -84,6 +107,7 @@ export type Database = {
           description?: string | null
           id?: string
           key_result_id: string
+          month?: string | null
           new_value: number
           previous_value: number
         }
@@ -93,6 +117,7 @@ export type Database = {
           description?: string | null
           id?: string
           key_result_id?: string
+          month?: string | null
           new_value?: number
           previous_value?: number
         }
@@ -111,7 +136,9 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          parent_objective_id: string | null
           period_id: string
+          team_id: string | null
           title: string
           type: Database["public"]["Enums"]["okr_type"]
           updated_at: string
@@ -120,7 +147,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          parent_objective_id?: string | null
           period_id: string
+          team_id?: string | null
           title: string
           type?: Database["public"]["Enums"]["okr_type"]
           updated_at?: string
@@ -129,17 +158,33 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          parent_objective_id?: string | null
           period_id?: string
+          team_id?: string | null
           title?: string
           type?: Database["public"]["Enums"]["okr_type"]
           updated_at?: string
         }
         Relationships: [
           {
+            foreignKeyName: "objectives_parent_objective_id_fkey"
+            columns: ["parent_objective_id"]
+            isOneToOne: false
+            referencedRelation: "objectives"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "objectives_period_id_fkey"
             columns: ["period_id"]
             isOneToOne: false
             referencedRelation: "periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "objectives_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
             referencedColumns: ["id"]
           },
         ]
