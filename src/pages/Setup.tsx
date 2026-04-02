@@ -31,6 +31,9 @@ export default function Setup() {
     }
 
     if (signUpData.user) {
+      // Wait a moment for the profile trigger to complete
+      await new Promise((r) => setTimeout(r, 1000));
+
       // Assign admin role (RLS allows first user to self-assign)
       const { error: roleError } = await supabase
         .from("user_roles")
@@ -38,9 +41,13 @@ export default function Setup() {
 
       if (roleError) {
         toast.error("Erro ao definir role de admin: " + roleError.message);
-      } else {
-        toast.success("Conta de administrador criada com sucesso!");
+        setLoading(false);
+        return;
       }
+
+      toast.success("Conta de administrador criada com sucesso!");
+      // Force reload to pick up the new role
+      window.location.href = "/";
     }
 
     setLoading(false);

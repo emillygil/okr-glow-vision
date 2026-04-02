@@ -29,12 +29,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [teamId, setTeamId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserMeta = async (userId: string) => {
+  const fetchUserMeta = async (userId: string, retries = 3) => {
     const { data: roleData } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
       .maybeSingle();
+
+    if (!roleData && retries > 0) {
+      // Role may not be inserted yet, retry
+      await new Promise((r) => setTimeout(r, 1000));
+      return fetchUserMeta(userId, retries - 1);
+    }
+
     setRole((roleData?.role as AppRole) ?? null);
 
     const { data: profileData } = await supabase
