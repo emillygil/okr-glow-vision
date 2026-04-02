@@ -64,9 +64,10 @@ export function AppLayout({ children }: AppLayoutProps) {
                 variant="ghost"
                 size="sm"
                 onClick={signOut}
-                className="text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10"
+                className="gap-2 text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10"
               >
                 <LogOut className="h-4 w-4" />
+                <span>Sair</span>
               </Button>
             </div>
           </div>

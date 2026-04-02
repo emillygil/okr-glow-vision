@@ -9,6 +9,7 @@ interface AuthContextType {
   user: User | null;
   role: AppRole;
   teamId: string | null;
+  hasProfile: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -18,6 +19,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   role: null,
   teamId: null,
+  hasProfile: false,
   loading: true,
   signOut: async () => {},
 });
@@ -27,53 +29,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<AppRole>(null);
   const [teamId, setTeamId] = useState<string | null>(null);
+  const [hasProfile, setHasProfile] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserMeta = async (userId: string, retries = 3) => {
-    const { data: roleData } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .maybeSingle();
+  const fetchUserMeta = async (userId: string, retries = 6): Promise<{
+    role: AppRole;
+    teamId: string | null;
+    hasProfile: boolean;
+  }> => {
+    const [{ data: roleData }, { data: profileData }] = await Promise.all([
+      supabase.from("user_roles").select("role").eq("user_id", userId).maybeSingle(),
+      supabase.from("profiles").select("team_id").eq("user_id", userId).maybeSingle(),
+    ]);
 
-    if (!roleData && retries > 0) {
-      // Role may not be inserted yet, retry
-      await new Promise((r) => setTimeout(r, 1000));
+    const resolvedRole = (roleData?.role as AppRole) ?? null;
+    const resolvedHasProfile = Boolean(profileData);
+
+    if ((!resolvedRole || !resolvedHasProfile) && retries > 0) {
+      await new Promise((r) => setTimeout(r, 500));
       return fetchUserMeta(userId, retries - 1);
     }
 
-    setRole((roleData?.role as AppRole) ?? null);
+    return {
+      role: resolvedRole,
+      teamId: profileData?.team_id ?? null,
+      hasProfile: resolvedHasProfile,
+    };
+  };
 
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select("team_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-    setTeamId(profileData?.team_id ?? null);
+  const syncAuthState = async (nextSession: Session | null) => {
+    setLoading(true);
+    setSession(nextSession);
+    setUser(nextSession?.user ?? null);
+
+    if (!nextSession?.user) {
+      setRole(null);
+      setTeamId(null);
+      setHasProfile(false);
+      setLoading(false);
+      return;
+    }
+
+    const userMeta = await fetchUserMeta(nextSession.user.id);
+    setRole(userMeta.role);
+    setTeamId(userMeta.teamId);
+    setHasProfile(userMeta.hasProfile);
+    setLoading(false);
   };
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          fetchUserMeta(session.user.id);
-        } else {
-          setRole(null);
-          setTeamId(null);
-        }
-        setLoading(false);
+      async (_event, nextSession) => {
+        await syncAuthState(nextSession);
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserMeta(session.user.id);
-      }
-      setLoading(false);
+      void syncAuthState(session);
     });
 
     return () => subscription.unsubscribe();
@@ -85,10 +97,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setRole(null);
     setTeamId(null);
+    setHasProfile(false);
+    setLoading(false);
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, role, teamId, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, role, teamId, hasProfile, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

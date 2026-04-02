@@ -20,7 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const { session, role, loading } = useAuth();
+  const { session, role, loading, hasProfile, signOut } = useAuth();
   const [adminExists, setAdminExists] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -29,7 +29,13 @@ function AppRoutes() {
     });
   }, [session]);
 
-  if (loading || adminExists === null) {
+  useEffect(() => {
+    if (!loading && session && !hasProfile) {
+      void signOut();
+    }
+  }, [hasProfile, loading, session, signOut]);
+
+  if (loading || adminExists === null || (session && !hasProfile)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-muted-foreground">Carregando...</p>
@@ -52,18 +58,6 @@ function AppRoutes() {
       <Routes>
         <Route path="*" element={<Login />} />
       </Routes>
-    );
-  }
-
-  // No role assigned yet (waiting for admin to assign)
-  if (!role) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="text-center">
-          <p className="text-foreground font-semibold">Aguardando atribuição de acesso</p>
-          <p className="text-sm text-muted-foreground mt-1">Peça ao administrador para definir seu perfil.</p>
-        </div>
-      </div>
     );
   }
 

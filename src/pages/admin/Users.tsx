@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 
 export default function UsersAdmin() {
   const queryClient = useQueryClient();
@@ -39,29 +39,18 @@ export default function UsersAdmin() {
 
   const createUser = useMutation({
     mutationFn: async () => {
-      // Create user via signup
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: fullName } },
+      const { data, error } = await supabase.functions.invoke("admin-create-user", {
+        body: {
+          email,
+          password,
+          fullName,
+          role,
+          teamId: role === "operator" ? teamId || null : null,
+        },
       });
-      if (signUpError) throw signUpError;
-      if (!signUpData.user) throw new Error("Erro ao criar usuário");
 
-      // Assign role
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert({ user_id: signUpData.user.id, role });
-      if (roleError) throw roleError;
-
-      // Update profile with team
-      if (teamId) {
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .update({ team_id: teamId })
-          .eq("user_id", signUpData.user.id);
-        if (profileError) throw profileError;
-      }
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users-list"] });
