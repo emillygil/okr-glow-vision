@@ -100,6 +100,7 @@ export type Database = {
           month: string | null
           new_value: number
           previous_value: number
+          updated_by_name: string | null
         }
         Insert: {
           created_at?: string
@@ -110,6 +111,7 @@ export type Database = {
           month?: string | null
           new_value: number
           previous_value: number
+          updated_by_name?: string | null
         }
         Update: {
           created_at?: string
@@ -120,6 +122,7 @@ export type Database = {
           month?: string | null
           new_value?: number
           previous_value?: number
+          updated_by_name?: string | null
         }
         Relationships: [
           {
