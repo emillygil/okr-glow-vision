@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          setTimeout(() => fetchUserMeta(session.user.id), 0);
+          fetchUserMeta(session.user.id);
         } else {
           setRole(null);
           setTeamId(null);
