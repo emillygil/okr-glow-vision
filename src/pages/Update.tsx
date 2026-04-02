@@ -684,10 +684,15 @@ export default function Update() {
               {history.map((h: any) => (
                 <div key={h.id} className="border-l-2 border-secondary pl-3 py-1">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground">
-                      {formatBrazilianDate(h.created_at)}
-                      {h.month && ` · Ref: ${h.month}`}
-                    </p>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        {formatBrazilianDate(h.created_at)}
+                        {h.month && ` · Ref: ${h.month}`}
+                      </p>
+                      {(h as any).updated_by_name && (
+                        <p className="text-xs text-muted-foreground">por {(h as any).updated_by_name}</p>
+                      )}
+                    </div>
                     {canEdit && (
                       <div className="flex items-center gap-1">
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => {
