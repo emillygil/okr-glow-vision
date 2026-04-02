@@ -228,6 +228,7 @@ export default function Update() {
         description,
         created_by: user?.id,
         month: updateMonth || null,
+        updated_by_name: userProfile?.full_name ?? user?.email ?? "Desconhecido",
       });
 
       const { error } = await supabase
