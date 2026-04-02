@@ -266,6 +266,9 @@ export default function Dashboard() {
                     {formatBrazilianDate(h.created_at)}
                     {h.month && ` · Ref: ${h.month}`}
                   </p>
+                  {h.updated_by_name && (
+                    <p className="text-xs text-muted-foreground">por {h.updated_by_name}</p>
+                  )}
                   <p className="text-sm font-medium text-foreground">{h.description}</p>
                   <p className="text-xs text-muted-foreground">{h.previous_value} → {h.new_value}</p>
                 </div>
