@@ -127,6 +127,16 @@ export default function Update() {
     enabled: !!historyKrId,
   });
 
+  const { data: userProfile } = useQuery({
+    queryKey: ["my-profile", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data } = await supabase.from("profiles").select("full_name").eq("user_id", user.id).maybeSingle();
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
   const canEdit = selectedPeriod?.is_open ?? false;
 
   const canEditKR = (kr: any) => {
