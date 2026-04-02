@@ -4,11 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Pencil, Check, X } from "lucide-react";
 
 export default function Teams() {
   const queryClient = useQueryClient();
   const [newName, setNewName] = useState("");
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
 
   const { data: teams = [], isLoading } = useQuery({
     queryKey: ["teams"],
@@ -28,6 +30,19 @@ export default function Teams() {
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       setNewName("");
       toast.success("Equipe criada!");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const updateTeam = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { error } = await supabase.from("teams").update({ name }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      setEditId(null);
+      toast.success("Equipe atualizada!");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -67,15 +82,42 @@ export default function Teams() {
         <div className="space-y-2">
           {teams.map((t) => (
             <div key={t.id} className="glass-card rounded-xl p-4 flex items-center justify-between">
-              <span className="font-medium text-foreground">{t.name}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => deleteTeam.mutate(t.id)}
-                className="text-destructive hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {editId === t.id ? (
+                <div className="flex items-center gap-2 flex-1">
+                  <Input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-64"
+                  />
+                  <Button size="sm" onClick={() => editName.trim() && updateTeam.mutate({ id: t.id, name: editName.trim() })} disabled={!editName.trim()}>
+                    <Check className="h-4 w-4" />
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditId(null)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <span className="font-medium text-foreground">{t.name}</span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setEditId(t.id); setEditName(t.name); }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => deleteTeam.mutate(t.id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>
